@@ -44,6 +44,7 @@ import           Data.Text.Encoding
 import           Network.Wreq hiding (Options)
 import           Network.HTTP.Client (HttpException)
 import           Data.ByteString.Lazy (ByteString)
+import qualified Codec.Compression.GZip as GZip
 import           Control.Exception (try)
 import           Network.SendGridV3.JSON (unPrefix)
 
@@ -440,3 +441,15 @@ sendMail (ApiKey key) mail' = do
         . (header "Content-Type" .~ ["application/json"])
 
   try . postWith opts (T.unpack sendGridAPI) $ encode (toJSON mail')
+
+sendMailGZipped :: (ToJSON a, ToJSON b) => ApiKey -> Mail a b -> IO (Either HttpException (Response ByteString))
+sendMailGZipped (ApiKey key) mail' = do
+  let tkn = encodeUtf8 $ "Bearer " <> key
+      opts = defaults &
+          (header "Authorization" .~ [tkn])
+        . (header "Content-Type" .~ ["application/json"])
+        . (header "Content-Encoding" .~ ["gzip"])
+
+  try . postWith opts (T.unpack sendGridAPI)
+      . GZip.compress
+      $ encode (toJSON mail')
