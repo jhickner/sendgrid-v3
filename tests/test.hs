@@ -40,6 +40,14 @@ main = do
       case eResponse of
         Left  err -> error "Failed to send email with opts"
         Right r   -> r ^. responseStatus . statusCode @?= 202
+
+    -- NOTE: This test will fail if gzipped payloads are not enabled for your account
+    -- (contact support to enable them)
+    , testCase "Send email gzipped" $ do
+      eResponse <- sendMailGZipped sendgridKey (testMail testMailAddr)
+      case eResponse of
+        Left  err -> error "Failed to send gzipped email"
+        Right r   -> r ^. responseStatus . statusCode @?= 202
     ]
 
 getSendGridKey :: IO ApiKey
