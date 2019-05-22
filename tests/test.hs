@@ -1,9 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 import           Control.Lens                             ( (^.) )
+import           Data.Either (isRight)
 import           Data.List.NonEmpty                       ( fromList )
 import           Data.Text                     as T
 import           Network.SendGridV3.Api
+import           Network.SendGridV3.Api.Templates
 import           Network.Wreq
 import           System.Environment
 import           Test.Tasty
@@ -19,6 +21,7 @@ main :: IO ()
 main = do
   sendgridKey  <- getSendGridKey
   testMailAddr <- getTestEmailAddress
+  let templateId = TemplateId "d-233ffd1f4e314b279db9b32d5eebb687"
   defaultMain $ testGroup
     "SendGrid v3 API"
     [ testCase "Send email simple" $ do
@@ -48,6 +51,14 @@ main = do
       case eResponse of
         Left  err -> error "Failed to send gzipped email"
         Right r   -> r ^. responseStatus . statusCode @?= 202
+
+    , testCase "Get template" $ do
+      eResponse <- getTemplate sendgridKey templateId
+      isRight eResponse @? "Invalid response"
+
+    , testCase "Get template html content" $ do
+      eResponse <- getTemplateActiveHTMLContent sendgridKey templateId
+      isRight eResponse @? "Invalid response"
     ]
 
 getSendGridKey :: IO ApiKey

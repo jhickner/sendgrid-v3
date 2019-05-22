@@ -7,7 +7,6 @@ module Network.SendGridV3.Api.Templates where
 
 import           Control.Lens
 import           Control.Lens.TH
-import           Control.Exception (catches, Handler(..))
 import           Control.Error.Util (note)
 import           Data.Aeson
 import           Data.Aeson.Types
@@ -93,42 +92,27 @@ $(deriveFromJSON defaultOptions
 
 -----------------------------------------------------------------------------
 
--- | Helper that attempts to parse a wreq request as JSON, catching exceptions
--- and translating into an `APIError`
-tryAsJSON :: FromJSON a => IO (W.Response ByteString) -> IO (Either APIError a)
-tryAsJSON expr =
-  (Right . view W.responseBody <$> (W.asJSON =<< expr)) `catches`
-    [ Handler (\ (ex :: HttpException) -> pure $ Left APIHTTPError)
-    , Handler (\ (W.JSONError err)     -> pure . Left $ APIJSONError err)
-    ]
-
-data APIError
-  = APIHTTPError
-  | APIJSONError String
-  | NotFoundError
-  deriving (Eq, Show)
-
 -- | Get all dynamic templates
-getTemplates :: Api.ApiKey -> IO (Either APIError Templates)
+getTemplates :: Api.ApiKey -> IO (Either Api.APIError Templates)
 getTemplates key = do
   let opts = Api.defaultOpts key
       url = T.unpack $ Api.sendGridAPIRoot <> "templates?generations=dynamic"
-  tryAsJSON $ W.getWith opts url
+  Api.tryAsJSON $ W.getWith opts url
 
 -- | Get the given template
-getTemplate :: Api.ApiKey -> TemplateId -> IO (Either APIError Template)
+getTemplate :: Api.ApiKey -> TemplateId -> IO (Either Api.APIError Template)
 getTemplate key tid = do
   let opts = Api.defaultOpts key
       url = T.unpack $ Api.sendGridAPIRoot <> "templates/" <> unTemplateId tid
-  tryAsJSON $ W.getWith opts url
+  Api.tryAsJSON $ W.getWith opts url
 
 -- | Get the HTML content of the active version of the given template
 getTemplateActiveHTMLContent
-  :: Api.ApiKey -> TemplateId -> IO (Either APIError Text)
+  :: Api.ApiKey -> TemplateId -> IO (Either Api.APIError Text)
 getTemplateActiveHTMLContent key tid =
   getTemplate key tid >>= \et -> pure $ do
     t <- et
-    note NotFoundError $
+    note Api.APINotFoundError $
       t ^? templateVersions
          . folded
          . filtered (view versionActive)

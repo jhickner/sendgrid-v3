@@ -1,5 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Module that implements a subset of the SendGrid v3 API.
 --   https://sendgrid.com/docs/API_Reference/api_v3.html
@@ -45,7 +46,7 @@ import qualified Network.Wreq as W
 import           Network.HTTP.Client (HttpException)
 import           Data.ByteString.Lazy (ByteString)
 import qualified Codec.Compression.GZip as GZip
-import           Control.Exception (try)
+import           Control.Exception (try, catches, Handler(..))
 import           Network.SendGridV3.JSON (unPrefix)
 
 -- | URL to SendGrid API
@@ -58,6 +59,12 @@ defaultOpts (ApiKey key) =
   in  W.defaults &
           (W.header "Authorization" .~ [tkn])
         . (W.header "Content-Type" .~ ["application/json"])
+
+data APIError
+  = APIHTTPError
+  | APIJSONError String
+  | APINotFoundError
+  deriving (Eq, Show)
 
 -- | Bearer Token for the API
 data ApiKey = ApiKey { _apiKey :: T.Text } deriving (Show, Eq)
@@ -431,6 +438,15 @@ mail personalizations from subject content =
   }
 
 
+
+-- | Helper that attempts to parse a wreq request as JSON, catching exceptions
+-- and translating into an `APIError`
+tryAsJSON :: FromJSON a => IO (W.Response ByteString) -> IO (Either APIError a)
+tryAsJSON expr =
+  (Right . view W.responseBody <$> (W.asJSON =<< expr)) `catches`
+    [ Handler (\ (ex :: HttpException) -> pure $ Left APIHTTPError)
+    , Handler (\ (W.JSONError err)     -> pure . Left $ APIJSONError err)
+    ]
 
 sendGridAPIMail :: T.Text
 sendGridAPIMail = sendGridAPIRoot <> "mail/send"
