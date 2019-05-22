@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- | Module that implements the Mail API of SendGrid v3.
+-- | Module that implements a subset of the SendGrid v3 API.
 --   https://sendgrid.com/docs/API_Reference/api_v3.html
 --
 -- >
@@ -41,16 +41,23 @@ import           Data.List.NonEmpty (NonEmpty)
 import           Data.Semigroup ((<>))
 import qualified Data.Text as T
 import           Data.Text.Encoding
-import           Network.Wreq hiding (Options)
+import qualified Network.Wreq as W
 import           Network.HTTP.Client (HttpException)
 import           Data.ByteString.Lazy (ByteString)
 import qualified Codec.Compression.GZip as GZip
 import           Control.Exception (try)
 import           Network.SendGridV3.JSON (unPrefix)
 
--- | URL to SendGrid Mail API
-sendGridAPI :: T.Text
-sendGridAPI = "https://api.sendgrid.com/v3/mail/send"
+-- | URL to SendGrid API
+sendGridAPIRoot :: T.Text
+sendGridAPIRoot = "https://api.sendgrid.com/v3/"
+
+defaultOpts :: ApiKey -> W.Options
+defaultOpts (ApiKey key) =
+  let tkn = encodeUtf8 $ "Bearer " <> key
+  in  W.defaults &
+          (W.header "Authorization" .~ [tkn])
+        . (W.header "Content-Type" .~ ["application/json"])
 
 -- | Bearer Token for the API
 data ApiKey = ApiKey { _apiKey :: T.Text } deriving (Show, Eq)
@@ -423,6 +430,11 @@ mail personalizations from subject content =
   , _mailTrackingSettings = Nothing
   }
 
+
+
+sendGridAPIMail :: T.Text
+sendGridAPIMail = sendGridAPIRoot <> "mail/send"
+
 -- | Send an email via the @SendGrid@ API.
 --
 --  [@a@] Type of Mail Section, see `_mailSections` for details.
@@ -433,23 +445,14 @@ mail personalizations from subject content =
 --  - A successful @'Response'@ from the SendGrid API
 --  - An @'HttpException'@, thrown from @'Network.Wreq.postWith'@
 --
-sendMail :: (ToJSON a, ToJSON b) => ApiKey -> Mail a b -> IO (Either HttpException (Response ByteString))
-sendMail (ApiKey key) mail' = do
-  let tkn = encodeUtf8 $ "Bearer " <> key
-      opts = defaults &
-          (header "Authorization" .~ [tkn])
-        . (header "Content-Type" .~ ["application/json"])
+sendMail :: (ToJSON a, ToJSON b) => ApiKey -> Mail a b -> IO (Either HttpException (W.Response ByteString))
+sendMail key mail' = do
+  let opts = defaultOpts key
+  try . W.postWith opts (T.unpack sendGridAPIMail) $ encode (toJSON mail')
 
-  try . postWith opts (T.unpack sendGridAPI) $ encode (toJSON mail')
-
-sendMailGZipped :: (ToJSON a, ToJSON b) => ApiKey -> Mail a b -> IO (Either HttpException (Response ByteString))
-sendMailGZipped (ApiKey key) mail' = do
-  let tkn = encodeUtf8 $ "Bearer " <> key
-      opts = defaults &
-          (header "Authorization" .~ [tkn])
-        . (header "Content-Type" .~ ["application/json"])
-        . (header "Content-Encoding" .~ ["gzip"])
-
-  try . postWith opts (T.unpack sendGridAPI)
+sendMailGZipped :: (ToJSON a, ToJSON b) => ApiKey -> Mail a b -> IO (Either HttpException (W.Response ByteString))
+sendMailGZipped key mail' = do
+  let opts = defaultOpts key & (W.header "Content-Encoding" .~ ["gzip"])
+  try . W.postWith opts (T.unpack sendGridAPIMail)
       . GZip.compress
       $ encode (toJSON mail')
