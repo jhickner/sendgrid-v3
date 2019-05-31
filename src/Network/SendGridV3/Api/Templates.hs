@@ -12,7 +12,8 @@ import           Data.Aeson
 import           Data.Aeson.Types
 import           Data.Aeson.TH
 import           Data.ByteString.Lazy (ByteString)
-import           Data.Char (toLower)
+import           Data.Char
+import           Data.List
 import           Data.Semigroup ((<>))
 import           Data.Text (Text)
 import qualified Data.Text as T
@@ -26,6 +27,19 @@ import           Network.SendGridV3.JSON (unPrefix)
 
 newtype TemplateId = TemplateId { unTemplateId :: Text }
   deriving (Show)
+
+mkTemplateId :: Text -> Maybe TemplateId
+mkTemplateId t
+  | T.length t == 34 =
+      let ([a,b], suffix) = splitAt 2 $ T.unpack t
+      in  if isLowerAlphaNum a
+               && b == '-'
+               && all isLowerAlphaNum suffix
+          then Just $ TemplateId t
+          else Nothing
+  | otherwise = Nothing
+  where
+    isLowerAlphaNum a = (isAlpha a && isLower a) || isDigit a
 
 instance FromJSON TemplateId where
   parseJSON (String s) = pure $ TemplateId s
