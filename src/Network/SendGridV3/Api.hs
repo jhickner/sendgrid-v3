@@ -467,8 +467,10 @@ sendMail key mail' = do
   try . W.postWith opts (T.unpack sendGridAPIMail) $ encode (toJSON mail')
 
 sendMailGZipped :: (ToJSON a, ToJSON b) => ApiKey -> Mail a b -> IO (Either HttpException (W.Response ByteString))
-sendMailGZipped key mail' = do
+sendMailGZipped key mail' =
+  sendGZipped key . GZip.compress . encode $ toJSON mail'
+
+sendGZipped :: ApiKey -> ByteString -> IO (Either HttpException (W.Response ByteString))
+sendGZipped key bs = do
   let opts = defaultOpts key & (W.header "Content-Encoding" .~ ["gzip"])
-  try . W.postWith opts (T.unpack sendGridAPIMail)
-      . GZip.compress
-      $ encode (toJSON mail')
+  try $ W.postWith opts (T.unpack sendGridAPIMail) bs
